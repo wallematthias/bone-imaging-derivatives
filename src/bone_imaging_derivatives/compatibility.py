@@ -25,19 +25,24 @@ def discover_legacy_timelapsed_records(dataset_root: Path) -> list[DerivativeRec
     legacy = root / "derivatives" / "TimelapsedHRpQCT"
     if not legacy.exists():
         return []
-    role_patterns = {
-        "formation": "formation_mask", "resorption": "resorption_mask", "stable": "stable_mask",
-        "transform": "transform_to_reference", "common": "scan_region_native_common",
-        "region": "scan_region_native_common", "remodelling": "remodelling_pairwise_table",
-    }
+    artifact_patterns = (
+        ("formation", "Timelapsed", "formation_mask"),
+        ("resorption", "Timelapsed", "resorption_mask"),
+        ("stable", "Timelapsed", "stable_mask"),
+        ("remodelling", "Timelapsed", "remodelling_pairwise_table"),
+        ("transform", "Registration", "transform_to_reference"),
+        ("common", "CommonRegion", "scan_region_native_common"),
+        ("region", "CommonRegion", "scan_region_native_common"),
+    )
     records: list[DerivativeRecord] = []
     for path in sorted(item for item in legacy.rglob("*") if item.is_file()):
         name = path.name.lower()
-        role = next((value for key, value in role_patterns.items() if key in name), None)
-        if role is None:
+        artifact = next(((family, role) for key, family, role in artifact_patterns if key in name), None)
+        if artifact is None:
             continue
         subject, site, session = _context(path)
-        records.append(DerivativeRecord("Timelapsed", role, subject, site, session, None,
+        family, role = artifact
+        records.append(DerivativeRecord(family, role, subject, site, session, None,
                                         _space(path), path, "legacy"))
     return records
 

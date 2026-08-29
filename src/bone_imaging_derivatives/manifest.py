@@ -63,13 +63,33 @@ def write_manifest(manifest: DerivativeManifest, path: Path) -> None:
     """Write an indented, portable schema-v1 JSON manifest."""
     path = Path(path)
     root = manifest.dataset_root.resolve()
+    manifest_location = path.resolve()
+    dataset_root = "." if _manifest_is_within_dataset(manifest_location, root) else str(root)
     payload = {
         "schema_version": manifest.schema_version, "derivative_family": manifest.derivative_family,
-        "software": dict(manifest.software), "dataset_root": str(root), "created_at": manifest.created_at,
+        "software": dict(manifest.software), "dataset_root": dataset_root, "created_at": manifest.created_at,
         "records": [_record_payload(record, root) for record in manifest.records],
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _manifest_is_within_dataset(path: Path, dataset_root: Path) -> bool:
+    try:
+        path.relative_to(dataset_root)
+    except ValueError:
+        return False
+    return True
+
+
+def _dataset_root_from_manifest(path: Path, raw_root: Path) -> Path:
+    """Resolve a portable ``'.'`` root from the standard derivatives layout."""
+    if raw_root != Path("."):
+        return (path.parent / raw_root).resolve()
+    for parent in path.parents:
+        if parent.name == "derivatives":
+            return parent.parent.resolve()
+    return path.parent.resolve()
 
 
 def _required(data: Mapping[str, Any], key: str) -> Any:
@@ -106,7 +126,7 @@ def read_manifest(path: Path) -> DerivativeManifest:
     if version != SCHEMA_VERSION:
         raise ValueError(f"Unsupported schema_version: {version}")
     raw_root = Path(_required(payload, "dataset_root"))
-    root = raw_root if raw_root.is_absolute() else (path.parent / raw_root).resolve()
+    root = raw_root if raw_root.is_absolute() else _dataset_root_from_manifest(path, raw_root)
     records_data = _required(payload, "records")
     if not isinstance(records_data, list):
         raise ValueError("records must be a list")

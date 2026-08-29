@@ -1,4 +1,5 @@
 from pathlib import Path
+import shutil
 
 from bone_imaging_derivatives import DerivativeManifest, DerivativeRecord, read_manifest, write_manifest
 
@@ -38,3 +39,24 @@ def test_manifest_rejects_unsupported_schema_version(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="schema_version"):
         read_manifest(path)
+
+
+def test_manifest_relative_records_follow_a_copied_dataset_root(tmp_path: Path) -> None:
+    """An absolute serialized root would make copied datasets point at stale artifacts."""
+    original = tmp_path / "original"
+    original_record = original / "derivatives" / "Registration" / "sub-S01" / "transform.tfm"
+    manifest_path = original / "derivatives" / "Registration" / "manifest.json"
+    manifest = DerivativeManifest.create(
+        "Registration", original, {"name": "timelapsed-hrpqct", "version": "2.0"},
+        (DerivativeRecord("Registration", "transform_to_reference", "S01", "tibia", "1", None,
+                          "native", original_record, "generated"),),
+        "2026-08-29T00:00:00Z",
+    )
+    write_manifest(manifest, manifest_path)
+    copied = tmp_path / "copied"
+    shutil.copytree(original, copied)
+
+    loaded = read_manifest(copied / "derivatives" / "Registration" / "manifest.json")
+
+    assert loaded.dataset_root == copied.resolve()
+    assert loaded.records[0].path == copied / "derivatives" / "Registration" / "sub-S01" / "transform.tfm"
