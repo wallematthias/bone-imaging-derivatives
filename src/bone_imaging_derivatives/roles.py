@@ -16,6 +16,9 @@ DERIVATIVE_ROLES = frozenset({
     "solver_output", "strain_map", "stress_map", "load_transfer_table",
     "mechanoregulation_table", "mechanical_signal_map", "formation_mechanics_map",
     "resorption_mechanics_map", "adaptation_classification_map",
+    "solver_config", "material_image", "sed_map", "displacement_map", "summary_table",
+    "diagnostic_log", "stimulus_map", "formation_map", "resorption_map", "quiescence_map",
+    "classification_map",
     "void_measurements_table", "void_distance_map", "void_connectivity_map",
 })
 

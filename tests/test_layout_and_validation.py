@@ -8,6 +8,32 @@ from bone_imaging_derivatives.layout import derivative_family_root, record_outpu
 from bone_imaging_derivatives.roles import validate_role
 
 
+@pytest.mark.parametrize(
+    ("family", "roles"),
+    [
+        (
+            "FEA",
+            (
+                "solver_input", "solver_config", "material_image", "boundary_conditions",
+                "sed_map", "strain_map", "stress_map", "displacement_map", "summary_table",
+                "diagnostic_log",
+            ),
+        ),
+        (
+            "Mechanoregulation",
+            (
+                "stimulus_map", "formation_map", "resorption_map", "quiescence_map",
+                "classification_map", "summary_table", "diagnostic_log",
+            ),
+        ),
+    ],
+)
+def test_fea_and_mechanoregulation_contract_roles_are_valid(family: str, roles: tuple[str, ...]) -> None:
+    """Missing Task 1 roles would prevent those workflow artifacts from being recorded."""
+    assert validate_derivative_family(family) == family
+    assert [validate_role(role) for role in roles] == list(roles)
+
+
 def test_layout_helpers_build_the_standard_subject_site_layout(tmp_path: Path) -> None:
     """A changed layout would make independently produced derivatives undiscoverable."""
     root = tmp_path / "dataset"
