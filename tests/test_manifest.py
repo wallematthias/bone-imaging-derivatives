@@ -60,3 +60,45 @@ def test_manifest_relative_records_follow_a_copied_dataset_root(tmp_path: Path) 
 
     assert loaded.dataset_root == copied.resolve()
     assert loaded.records[0].path == copied / "derivatives" / "Registration" / "sub-S01" / "transform.tfm"
+
+
+def test_manifest_round_trip_supports_virtual_aim_stack_views(tmp_path: Path) -> None:
+    """Virtual stack records let workflows reference AIM ranges without writing image copies."""
+    dataset_root = tmp_path / "dataset"
+    source = dataset_root / "raw" / "scan.AIM"
+    manifest_path = dataset_root / "derivatives" / "Registration" / "manifest.json"
+    record = DerivativeRecord(
+        derivative="Registration",
+        role="source_image_view",
+        subject_id="S01",
+        site="tibia",
+        session_id="1",
+        stack_index=2,
+        space="native",
+        path=source,
+        source="virtual",
+        inputs=(str(source),),
+        metadata={
+            "format": "AIM",
+            "view_type": "stack_slices",
+            "slice_axis": "z",
+            "slice_start": 20,
+            "slice_stop": 40,
+            "scaling": "bmd",
+        },
+        content_type="image",
+    )
+    manifest = DerivativeManifest.create(
+        "Registration",
+        dataset_root,
+        {"name": "timelapsed-hrpqct", "version": "2.1"},
+        (record,),
+        "2026-08-29T00:00:00Z",
+    )
+
+    write_manifest(manifest, manifest_path)
+    loaded = read_manifest(manifest_path)
+
+    assert loaded.records[0] == record
+    assert '"source": "virtual"' in manifest_path.read_text()
+    assert '"path": "raw/scan.AIM"' in manifest_path.read_text()

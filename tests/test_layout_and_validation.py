@@ -27,3 +27,35 @@ def test_family_role_and_record_validation_reject_unknown_contract_values(tmp_pa
         validate_role("not-a-role")
     with pytest.raises(ValueError, match="Unknown derivative role"):
         DerivativeRecord("CommonRegion", "not-a-role", "S01", "tibia", "1", None, "native", tmp_path / "x", "generated")
+
+
+def test_virtual_image_view_requires_stack_slice_metadata(tmp_path: Path) -> None:
+    """A virtual image without slice bounds cannot be safely loaded on demand."""
+    valid = DerivativeRecord(
+        "Registration",
+        "source_image_view",
+        "S01",
+        "tibia",
+        "1",
+        1,
+        "native",
+        tmp_path / "scan.AIM",
+        "virtual",
+        metadata={"format": "AIM", "view_type": "stack_slices", "slice_axis": "z", "slice_start": 0, "slice_stop": 10},
+        content_type="image",
+    )
+    assert valid.source == "virtual"
+    with pytest.raises(ValueError, match="virtual source_image_view records require"):
+        DerivativeRecord(
+            "Registration",
+            "source_image_view",
+            "S01",
+            "tibia",
+            "1",
+            1,
+            "native",
+            tmp_path / "scan.AIM",
+            "virtual",
+            metadata={"format": "AIM", "view_type": "stack_slices", "slice_start": 0},
+            content_type="image",
+        )

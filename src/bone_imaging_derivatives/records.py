@@ -9,7 +9,7 @@ from .families import validate_derivative_family
 from .roles import validate_role
 
 _SPACES = frozenset({"native", "reference", "moving", "fixed", "model", "table"})
-_SOURCES = frozenset({"generated", "provided", "derived", "legacy"})
+_SOURCES = frozenset({"generated", "provided", "derived", "legacy", "virtual"})
 
 
 @dataclass(frozen=True)
@@ -49,6 +49,8 @@ class DerivativeRecord:
         object.__setattr__(self, "path", Path(self.path))
         object.__setattr__(self, "inputs", tuple(self.inputs))
         object.__setattr__(self, "metadata", dict(self.metadata))
+        if self.source == "virtual" and self.role == "source_image_view":
+            self._validate_virtual_source_image_view()
         if self.coordinate_reference is not None:
             object.__setattr__(self, "coordinate_reference", dict(self.coordinate_reference))
         if self.software is not None:
@@ -60,3 +62,20 @@ class DerivativeRecord:
         parts = (self.derivative, self.role, self.subject_id, self.site,
                  self.session_id or "", str(self.stack_index), self.space, str(self.path))
         return sha256("\x1f".join(parts).encode()).hexdigest()[:20]
+
+    def _validate_virtual_source_image_view(self) -> None:
+        required = ("format", "view_type", "slice_axis", "slice_start", "slice_stop")
+        missing = [key for key in required if key not in self.metadata]
+        if missing:
+            keys = ", ".join(missing)
+            raise ValueError(f"virtual source_image_view records require metadata: {keys}")
+        if self.content_type not in (None, "image"):
+            raise ValueError("virtual source_image_view records must have content_type='image'")
+        if self.metadata.get("view_type") != "stack_slices":
+            raise ValueError("virtual source_image_view records currently require view_type='stack_slices'")
+        if self.metadata.get("slice_axis") != "z":
+            raise ValueError("virtual source_image_view records currently require slice_axis='z'")
+        start = self.metadata["slice_start"]
+        stop = self.metadata["slice_stop"]
+        if not isinstance(start, int) or not isinstance(stop, int) or stop <= start:
+            raise ValueError("virtual source_image_view records require integer slice_start < slice_stop")

@@ -11,7 +11,7 @@ DERIVATIVE_ROLES = frozenset({
     "cortical_porosity_map", "plate_rod_label_map", "plate_rod_measurements_table",
     "plate_local_thickness_map", "rod_local_thickness_map", "skeleton_map",
     "remodelling_pairwise_table", "remodelling_trajectory_table", "formation_mask",
-    "resorption_mask", "stable_mask", "transformed_image", "filled_image",
+    "resorption_mask", "stable_mask", "source_image_view", "transformed_image", "filled_image",
     "qc_report", "mesh", "material_map", "boundary_conditions", "solver_input",
     "solver_output", "strain_map", "stress_map", "load_transfer_table",
     "mechanoregulation_table", "mechanical_signal_map", "formation_mechanics_map",

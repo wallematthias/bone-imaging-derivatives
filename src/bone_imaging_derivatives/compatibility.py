@@ -68,6 +68,6 @@ def write_compatibility_manifest(dataset_root: Path) -> Path:
     root = Path(dataset_root)
     records = tuple(discover_legacy_timelapsed_records(root) + discover_legacy_registered_microarchitecture_records(root))
     output = manifest_path(root, "Compatibility")
-    manifest = DerivativeManifest.create("Compatibility", root, {"name": "bone-imaging-derivatives", "version": "0.1.0"}, records)
+    manifest = DerivativeManifest.create("Compatibility", root, {"name": "bone-imaging-derivatives", "version": "0.1.1"}, records)
     write_manifest(manifest, output)
     return output
