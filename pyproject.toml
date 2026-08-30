@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bone-imaging-derivatives"
-version = "0.1.1"
+version = "0.1.2"
 description = "Dependency-light contracts for bone imaging derivative datasets"
 readme = "README.md"
 requires-python = ">=3.10"
