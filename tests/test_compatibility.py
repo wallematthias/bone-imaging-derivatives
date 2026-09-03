@@ -24,6 +24,7 @@ def test_legacy_discovery_and_compatibility_manifest_cover_existing_outputs(tmp_
     manifest_path = write_compatibility_manifest(root)
 
     assert timelapsed[0].role == "formation_mask"
+    assert timelapsed[0].derivative == "Timelapse"
     assert timelapsed[0].source == "legacy"
     assert microarchitecture[0].role == "measurements_table"
     assert len(read_manifest(manifest_path).records) == 2

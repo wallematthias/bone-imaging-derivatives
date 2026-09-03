@@ -26,10 +26,10 @@ def discover_legacy_timelapsed_records(dataset_root: Path) -> list[DerivativeRec
     if not legacy.exists():
         return []
     artifact_patterns = (
-        ("formation", "Timelapsed", "formation_mask"),
-        ("resorption", "Timelapsed", "resorption_mask"),
-        ("stable", "Timelapsed", "stable_mask"),
-        ("remodelling", "Timelapsed", "remodelling_pairwise_table"),
+        ("formation", "Timelapse", "formation_mask"),
+        ("resorption", "Timelapse", "resorption_mask"),
+        ("stable", "Timelapse", "stable_mask"),
+        ("remodelling", "Timelapse", "remodelling_pairwise_table"),
         ("transform", "Registration", "transform_to_reference"),
         ("common", "CommonRegion", "scan_region_native_common"),
         ("region", "CommonRegion", "scan_region_native_common"),

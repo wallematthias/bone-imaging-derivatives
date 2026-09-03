@@ -19,7 +19,10 @@ _SESSION_PREFIX_RE = re.compile(r"^(?:ses[-_]?|session[-_]?|tp[-_]?)(.+)$", re.I
 _SUBJECT_TOKEN_RE = re.compile(r"(?:^|[_-])sub[-_]([A-Za-z0-9.]+)(?=[_-]|$)", re.IGNORECASE)
 _SESSION_TOKEN_RE = re.compile(r"(?:^|[_-])ses[-_]?([A-Za-z0-9.]+)(?=[_-]|$)", re.IGNORECASE)
 _SITE_TOKEN_RE = re.compile(r"(?:^|[_-])site[-_]?([A-Za-z0-9.]+)(?=[_-]|$)", re.IGNORECASE)
+_VOI_TOKEN_RE = re.compile(r"(?:^|[_-])voi[-_]?([A-Za-z0-9.]+)(?=[_-]|$)", re.IGNORECASE)
 _MASK_ROLE_RE = re.compile(r"(?:^|[_-])(?:mask|roi|seg)[-_]?([A-Za-z0-9][A-Za-z0-9._-]*)(?=[_.-]|$)", re.IGNORECASE)
+_DESC_MASK_RE = re.compile(r"(?i)(?:^|[_-])desc[-_]?([A-Za-z0-9][A-Za-z0-9._-]*)[_-]mask$")
+_DESC_MAP_RE = re.compile(r"(?i)(?:^|[_-])desc[-_]?([A-Za-z0-9][A-Za-z0-9._-]*)[_-]map$")
 _TRANSFORM_RE = re.compile(
     r"from[-_]?ses[-_]?([A-Za-z0-9][A-Za-z0-9._-]*)[_-]to[-_]?ses[-_]?([A-Za-z0-9][A-Za-z0-9._-]*)",
     re.IGNORECASE,
@@ -27,28 +30,40 @@ _TRANSFORM_RE = re.compile(
 _STACK_RE = re.compile(r"(?:^|[_-])STACK[_-]?0*([1-9]\d*)(?=[_-]|$)", re.IGNORECASE)
 
 _SITE_ALIASES = {
-    "20": "radius_left",
-    "21": "radius_right",
-    "38": "tibia_left",
-    "29": "tibia_right",
-    "rl": "radius_left",
-    "radius_l": "radius_left",
-    "radiusleft": "radius_left",
-    "left_radius": "radius_left",
-    "rr": "radius_right",
-    "radius_r": "radius_right",
-    "radiusright": "radius_right",
-    "right_radius": "radius_right",
-    "tl": "tibia_left",
-    "tibia_l": "tibia_left",
-    "tibialeft": "tibia_left",
-    "left_tibia": "tibia_left",
-    "tr": "tibia_right",
-    "tibia_r": "tibia_right",
-    "tibiaright": "tibia_right",
-    "right_tibia": "tibia_right",
-    "kl": "knee_left",
-    "kr": "knee_right",
+    "20": "radiusleft",
+    "21": "radiusright",
+    "38": "tibialeft",
+    "29": "tibiaright",
+    "rl": "radiusleft",
+    "radius_l": "radiusleft",
+    "radius_left": "radiusleft",
+    "radiusleft": "radiusleft",
+    "left_radius": "radiusleft",
+    "rr": "radiusright",
+    "radius_r": "radiusright",
+    "radius_right": "radiusright",
+    "radiusright": "radiusright",
+    "right_radius": "radiusright",
+    "tl": "tibialeft",
+    "tibia_l": "tibialeft",
+    "tibia_left": "tibialeft",
+    "tibialeft": "tibialeft",
+    "left_tibia": "tibialeft",
+    "tr": "tibiaright",
+    "tibia_r": "tibiaright",
+    "tibia_right": "tibiaright",
+    "tibiaright": "tibiaright",
+    "right_tibia": "tibiaright",
+    "kl": "kneeleft",
+    "kr": "kneeright",
+    "knee_l": "kneeleft",
+    "knee_left": "kneeleft",
+    "kneeleft": "kneeleft",
+    "left_knee": "kneeleft",
+    "knee_r": "kneeright",
+    "knee_right": "kneeright",
+    "kneeright": "kneeright",
+    "right_knee": "kneeright",
     "kn": "knee",
     "dr": "radius",
     "dt": "tibia",
@@ -66,6 +81,7 @@ _ROLE_ALIASES = {
     "bone_seg": "segmentation",
     "segmentation": "segmentation",
     "full": "full",
+    "full_mask": "full",
     "blck": "full",
     "block": "full",
     "blck_mask": "full",
@@ -73,8 +89,10 @@ _ROLE_ALIASES = {
     "peri": "full",
     "periosteal": "full",
     "trab": "trab",
+    "trab_mask": "trab",
     "trabecular": "trab",
     "cort": "cort",
+    "cort_mask": "cort",
     "crtx": "cort",
     "crtx_mask": "cort",
     "cortical": "cort",
@@ -219,7 +237,7 @@ def site_category(value: str | None) -> str | None:
     if site is None:
         return None
     for family in ("radius", "tibia", "knee"):
-        if site == family or site.startswith(f"{family}_"):
+        if site == family or site.startswith(family):
             return family
     return site
 
@@ -273,7 +291,24 @@ def discover_artifacts(dataset_root: str | Path, *, include_derivatives: bool = 
             record = _record_from_path(root, path)
             if record is not None:
                 records.append(record)
-    return ArtifactIndex(tuple(records), root)
+    return ArtifactIndex(tuple(sorted(records, key=_artifact_sort_key)), root)
+
+
+def _artifact_sort_key(record: ArtifactRecord) -> tuple[int, str]:
+    return (_artifact_source_priority(record.path), str(record.path).lower())
+
+
+def _artifact_source_priority(path: Path) -> int:
+    parts = [part.lower().replace("-", "_") for part in path.parts]
+    if "derivatives" not in parts:
+        return 30
+    index = parts.index("derivatives")
+    family = parts[index + 1] if index + 1 < len(parts) else ""
+    if family == "iplcontours":
+        return 0
+    if family == "bonecontours":
+        return 10
+    return 20
 
 
 def _normalize_dataset_root(root: Path) -> Path:
@@ -403,7 +438,7 @@ def _role_from_path(path: Path, kind: str, sidecar: Mapping[str, Any]) -> tuple[
         return normalize_role(explicit_role) or explicit_role, "sidecar"
     lower_name = path.name.lower()
     if kind == "image":
-        if "_map-" in lower_name or "maps" in {part.lower() for part in path.parts}:
+        if _DESC_MAP_RE.search(_strip_known_image_suffix(path.name)) or "_map-" in lower_name or "maps" in {part.lower() for part in path.parts}:
             return "map", "filename"
         return "image", "kind"
     if kind == "transform":
@@ -411,6 +446,9 @@ def _role_from_path(path: Path, kind: str, sidecar: Mapping[str, Any]) -> tuple[
     if kind == "table":
         return "table", "filename"
     stem = _strip_known_image_suffix(path.name).lower()
+    desc_match = _DESC_MASK_RE.search(stem)
+    if desc_match:
+        return normalize_role(desc_match.group(1)) or desc_match.group(1), "filename"
     for pattern, role in _ROLE_SUFFIX_PATTERNS:
         if pattern.search(stem):
             return role, "filename"
@@ -442,12 +480,12 @@ def _explicit_sidecar_role(sidecar: Mapping[str, Any]) -> str | None:
 
 
 def _subject_from_path(dataset_root: Path, path: Path, sidecar: Mapping[str, Any]) -> tuple[str | None, str | None]:
-    for key in ("subject_id", "subject", "patient_id", "patient_index"):
-        if sidecar.get(key) is not None:
-            return normalize_subject_id(str(sidecar[key])), "sidecar"
     for part in path.relative_to(dataset_root).parts[:-1]:
         if part.lower().startswith(("sub-", "sub_")):
             return normalize_subject_id(part), "path"
+    for key in ("subject_id", "subject", "patient_id", "patient_index"):
+        if sidecar.get(key) is not None:
+            return normalize_subject_id(str(sidecar[key])), "sidecar"
     for part in (*path.relative_to(dataset_root).parts[:-1], path.stem):
         match = _SUBJECT_TOKEN_RE.search(part)
         if match:
@@ -468,13 +506,13 @@ def _subject_from_path(dataset_root: Path, path: Path, sidecar: Mapping[str, Any
 
 
 def _session_from_path(dataset_root: Path, path: Path, sidecar: Mapping[str, Any]) -> tuple[str | None, str | None]:
-    for key in ("session_id", "session", "timepoint", "index_measurement"):
-        if sidecar.get(key) is not None:
-            return normalize_session_id(str(sidecar[key])), "sidecar"
     for part in (*path.relative_to(dataset_root).parts[:-1], path.stem):
         match = _SESSION_TOKEN_RE.search(part)
         if match:
             return normalize_session_id(match.group(1)), "path"
+    for key in ("session_id", "session", "timepoint", "index_measurement"):
+        if sidecar.get(key) is not None:
+            return normalize_session_id(str(sidecar[key])), "sidecar"
     for token in _tokens(path.name):
         if re.fullmatch(r"Y\d+", token, re.IGNORECASE):
             return normalize_session_id(token), "filename"
@@ -498,13 +536,17 @@ def _stack_from_path(path: Path, sidecar: Mapping[str, Any]) -> int | None:
 
 
 def _site_from_path(dataset_root: Path, path: Path, sidecar: Mapping[str, Any]) -> tuple[str | None, str | None]:
-    for key in ("site", "site_id", "scan_site"):
+    for part in (*path.relative_to(dataset_root).parts[:-1], path.stem):
+        match = _VOI_TOKEN_RE.search(part)
+        if match:
+            return normalize_site(match.group(1)), "path"
+    for key in ("site", "site_id", "scan_site", "voi", "volume_of_interest", "VolumeOfInterest"):
         if sidecar.get(key) is not None:
             return normalize_site(str(sidecar[key])), "sidecar"
     filename_site: str | None = None
     for token in _tokens(path.name):
         site = normalize_site(token)
-        if site in {"radius_left", "radius_right", "tibia_left", "tibia_right", "knee_left", "knee_right", "radius", "tibia", "knee"}:
+        if site in {"radiusleft", "radiusright", "tibialeft", "tibiaright", "kneeleft", "kneeright", "radius", "tibia", "knee"}:
             filename_site = site
             break
     for part in path.relative_to(dataset_root).parts[:-1]:
@@ -522,7 +564,7 @@ def _site_from_path(dataset_root: Path, path: Path, sidecar: Mapping[str, Any]) 
 def _sites_are_compatible(specific: str | None, generic: str | None) -> bool:
     if not specific or not generic:
         return False
-    return specific == generic or specific.startswith(f"{generic}_")
+    return specific == generic or specific.startswith(generic)
 
 
 def _tokens(name: str) -> list[str]:
@@ -533,12 +575,12 @@ def _tokens(name: str) -> list[str]:
 def _is_site_token(token: str) -> bool:
     site = normalize_site(token)
     return site in {
-        "radius_left",
-        "radius_right",
-        "tibia_left",
-        "tibia_right",
-        "knee_left",
-        "knee_right",
+        "radiusleft",
+        "radiusright",
+        "tibialeft",
+        "tibiaright",
+        "kneeleft",
+        "kneeright",
         "radius",
         "tibia",
         "knee",

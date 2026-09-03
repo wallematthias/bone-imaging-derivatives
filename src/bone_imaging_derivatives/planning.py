@@ -28,13 +28,13 @@ _REQUIREMENTS = {
     "CommonRegion": (WorkflowRequirement("Registration", ("transform_to_reference",)),),
     "Microarchitecture": (WorkflowRequirement("CommonRegion", ("scan_region_native_common",), False),),
     "PlateRodMorphometry": (WorkflowRequirement("CommonRegion", ("scan_region_native_common",), False),),
-    "Timelapsed": (
+    "Timelapse": (
         WorkflowRequirement("Registration", ("transform_to_reference",)),
         WorkflowRequirement("CommonRegion", ("scan_region_native_common",), False),
     ),
     "FEA": (WorkflowRequirement("CommonRegion", ("scan_region_native_common",), False),),
     "Mechanoregulation": (
-        WorkflowRequirement("Timelapsed", ("remodelling_pairwise_table",)),
+        WorkflowRequirement("Timelapse", ("remodelling_pairwise_table",)),
         WorkflowRequirement("FEA", ("solver_output",)),
     ),
 }

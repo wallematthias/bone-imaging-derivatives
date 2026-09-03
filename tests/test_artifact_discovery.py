@@ -24,8 +24,8 @@ def test_discover_artifacts_combines_raw_images_and_derivative_masks(tmp_path: P
 
     index = discover_artifacts(root)
 
-    images = index.find(kind="image", subject_id="STRAMBO_0001", site="radius_left")
-    masks = index.find(kind="mask", subject_id="STRAMBO_0001", site="radius_left", session_id="00")
+    images = index.find(kind="image", subject_id="STRAMBO_0001", site="radiusleft")
+    masks = index.find(kind="mask", subject_id="STRAMBO_0001", site="radiusleft", session_id="00")
 
     assert [record.session_id for record in images] == ["00", "04"]
     assert {record.role for record in masks} == {"segmentation", "full", "trab", "cort"}
@@ -50,14 +50,14 @@ def test_discovery_accepts_non_aim_images_and_keeps_weak_evidence(tmp_path: Path
 
 def test_site_and_session_aliases_are_side_safe() -> None:
     """Left/right site identity must not collapse when both sides exist."""
-    assert normalize_site("RL") == "radius_left"
-    assert normalize_site("RR") == "radius_right"
+    assert normalize_site("RL") == "radiusleft"
+    assert normalize_site("RR") == "radiusright"
     assert normalize_site("DR") == "radius"
-    assert normalize_site("TR") == "tibia_right"
+    assert normalize_site("TR") == "tibiaright"
     assert normalize_site("DT") == "tibia"
     assert normalize_site("KN") == "knee"
-    assert normalize_site("radius_left") == "radius_left"
-    assert site_category("radius_left") == "radius"
+    assert normalize_site("radius_left") == "radiusleft"
+    assert site_category("radiusleft") == "radius"
     assert site_category("RR") == "radius"
     assert normalize_session_id("ses-Y04") == "04"
     assert normalize_session_id("Y08") == "08"
@@ -100,13 +100,78 @@ def test_discover_artifacts_supports_documented_timelapsed_and_generic_roi_names
     index = discover_artifacts(root)
 
     assert len(index.find(kind="image", subject_id="SUBJ001", site="radius", session_id="T1")) == 1
-    assert len(index.find(kind="image", subject_id="SUBJ001", site="radius_left", session_id="T1")) == 1
-    assert len(index.find(kind="image", subject_id="SUBJ001", site="radius_right", session_id="T1")) == 1
+    assert len(index.find(kind="image", subject_id="SUBJ001", site="radiusleft", session_id="T1")) == 1
+    assert len(index.find(kind="image", subject_id="SUBJ001", site="radiusright", session_id="T1")) == 1
     assert index.find(kind="mask", role="trab", site="radius")[0].path.name.endswith("_TRAB_MASK.AIM")
     assert index.find(kind="mask", role="cort", site="radius")[0].path.name.endswith("_CORT_MASK.AIM")
     assert index.find(kind="mask", role="registration", site="radius")[0].path.name.endswith("_REGMASK.AIM")
     assert index.find(kind="mask", role="roi1", site="radius")[0].path.name.endswith("_ROI1.AIM")
     assert index.find(kind="mask", role="mask2", site="radius")[0].path.name.endswith("_MASK2.AIM")
+
+
+def test_discover_artifacts_supports_mids_style_xct_and_ipl_derivatives(tmp_path: Path) -> None:
+    root = tmp_path / "dataset"
+    raw = root / "sub-001" / "ses-001" / "xct" / "sub-001_ses-001_voi-radiusleft_xct.AIM"
+    mask = (
+        root
+        / "derivatives"
+        / "IPLContours"
+        / "sub-001"
+        / "ses-001"
+        / "xct"
+        / "sub-001_ses-001_voi-radiusleft_desc-trab_mask.AIM"
+    )
+    analysis = (
+        root
+        / "derivatives"
+        / "IPLAnalysis"
+        / "sub-001"
+        / "ses-001"
+        / "xct"
+        / "sub-001_ses-001_voi-radiusleft_desc-TbTh_map.AIM"
+    )
+    for path in (raw, mask, analysis):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
+
+    index = discover_artifacts(root)
+
+    raw_record = index.find(kind="image", role="image", subject_id="001", session_id="001", site="radiusleft")[0]
+    mask_record = index.find(kind="mask", role="trab", subject_id="001", session_id="001", site="radiusleft")[0]
+    map_record = index.find(kind="image", role="map", subject_id="001", session_id="001", site="radiusleft")[0]
+    assert raw_record.path == raw
+    assert mask_record.path == mask
+    assert map_record.path == analysis
+
+
+def test_discover_artifacts_prefers_ipl_contours_before_bone_contours(tmp_path: Path) -> None:
+    root = tmp_path / "dataset"
+    raw = root / "sub-001" / "ses-001" / "xct" / "sub-001_ses-001_voi-radiusleft_xct.AIM"
+    ipl = (
+        root
+        / "derivatives"
+        / "IPLContours"
+        / "sub-001"
+        / "ses-001"
+        / "xct"
+        / "sub-001_ses-001_voi-radiusleft_desc-full_mask.AIM"
+    )
+    bone = (
+        root
+        / "derivatives"
+        / "BoneContours"
+        / "sub-001"
+        / "ses-001"
+        / "xct"
+        / "sub-001_ses-001_voi-radiusleft_desc-full_mask.AIM"
+    )
+    for path in (raw, bone, ipl):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
+
+    matches = discover_artifacts(root).find(kind="mask", role="full", subject_id="001", session_id="001")
+
+    assert [record.path for record in matches] == [ipl, bone]
 
 
 def test_discover_artifacts_preserves_split_multistack_index(tmp_path: Path) -> None:
@@ -147,7 +212,7 @@ def test_user_overrides_replace_inferred_identity_and_record_provenance(tmp_path
 
     corrected = apply_overrides(record, {"site": "tibia_right", "session_id": "baseline"})
 
-    assert corrected.site == "tibia_right"
+    assert corrected.site == "tibiaright"
     assert corrected.session_id == "baseline"
     assert corrected.site_source == "user_override"
     assert corrected.session_source == "user_override"
@@ -170,6 +235,23 @@ def test_sidecar_mask_role_marks_unstructured_volume_as_mask(tmp_path: Path) -> 
     assert record.kind == "mask"
     assert record.role == "full"
     assert record.subject_id == "S01"
+
+
+def test_normalized_path_identity_takes_priority_over_stale_sidecar_identity(tmp_path: Path) -> None:
+    """Renamed datasets should keep pseudonymized path identity even with old helper sidecars."""
+    path = tmp_path / "sub-001" / "ses-001" / "xct" / "sub-001_ses-001_voi-radiusleft_xct.AIM"
+    path.parent.mkdir(parents=True)
+    path.touch()
+    path.with_name(f"{path.name}.json").write_text(
+        '{"subject_id": "STRAMBO_0001", "session_id": "Y00", "site": "radius_left", "role": "image"}'
+    )
+
+    record = discover_artifacts(tmp_path).records[0]
+
+    assert record.subject_id == "001"
+    assert record.session_id == "001"
+    assert record.site == "radiusleft"
+    assert record.role == "image"
 
 
 def test_derivative_maps_are_not_plain_input_images(tmp_path: Path) -> None:

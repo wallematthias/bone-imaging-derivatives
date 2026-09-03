@@ -16,7 +16,7 @@ def test_planner_blocks_common_region_without_registration_when_generation_disab
 
 def test_planner_allows_missing_prerequisite_generation(tmp_path: Path) -> None:
     """The generation option should turn a satisfiable prerequisite into an executable step."""
-    plan = resolve_workflow_plan("Timelapsed", manifests=(), subject_id="S01", site="tibia", sessions=("1", "2"), generate_missing=True)
+    plan = resolve_workflow_plan("Timelapse", manifests=(), subject_id="S01", site="tibia", sessions=("1", "2"), generate_missing=True)
 
     assert plan.blocked is False
     assert any("Generate Registration" in step for step in plan.steps)

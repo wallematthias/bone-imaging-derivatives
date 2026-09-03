@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from bone_imaging_derivatives import DerivativeRecord
+from bone_imaging_derivatives import DerivativeRecord, record_output_path as public_record_output_path, voi_token
 from bone_imaging_derivatives.families import validate_derivative_family
 from bone_imaging_derivatives.layout import derivative_family_root, record_output_path
 from bone_imaging_derivatives.roles import validate_role
@@ -34,13 +34,38 @@ def test_fea_and_mechanoregulation_contract_roles_are_valid(family: str, roles: 
     assert [validate_role(role) for role in roles] == list(roles)
 
 
-def test_layout_helpers_build_the_standard_subject_site_layout(tmp_path: Path) -> None:
-    """A changed layout would make independently produced derivatives undiscoverable."""
+def test_layout_helpers_build_the_standard_session_modality_layout(tmp_path: Path) -> None:
+    """A legacy site-folder layout would make derivatives diverge across tools."""
     root = tmp_path / "dataset"
     assert derivative_family_root(root, "CommonRegion") == root / "derivatives" / "CommonRegion"
     assert record_output_path(root, "CommonRegion", "S01", "tibia", "native_space", "ses-1", "masks", "mask.nii.gz") == (
-        root / "derivatives" / "CommonRegion" / "sub-S01" / "site-tibia" / "native_space" / "ses-1" / "masks" / "mask.nii.gz"
+        root / "derivatives" / "CommonRegion" / "sub-S01" / "ses-1" / "xct" / "masks" / "mask.nii.gz"
     )
+    assert record_output_path(root, "CommonRegion", "S01", "radius_left", "common_space", "masks", "mask.nii.gz") == (
+        root / "derivatives" / "CommonRegion" / "sub-S01" / "xct" / "masks" / "mask.nii.gz"
+    )
+    assert public_record_output_path(root, "Microarchitecture", "S01", "radius_left", "ses-1", "tables", "rows.csv") == (
+        root / "derivatives" / "Microarchitecture" / "sub-S01" / "ses-1" / "xct" / "tables" / "rows.csv"
+    )
+    assert voi_token("radius_left") == "radiusleft"
+    assert voi_token("tibia-right") == "tibiaright"
+
+
+def test_layout_helpers_normalize_existing_derivative_family_roots(tmp_path: Path) -> None:
+    """Shared-family outputs must not nest under another derivative family."""
+    root = tmp_path / "dataset"
+    timelapse_root = root / "derivatives" / "Timelapse"
+
+    assert derivative_family_root(timelapse_root, "CommonRegion") == root / "derivatives" / "CommonRegion"
+    assert record_output_path(
+        timelapse_root,
+        "CommonRegion",
+        "S01",
+        "radiusleft",
+        "ses-1",
+        "masks",
+        "mask.nii.gz",
+    ) == root / "derivatives" / "CommonRegion" / "sub-S01" / "ses-1" / "xct" / "masks" / "mask.nii.gz"
 
 
 def test_family_role_and_record_validation_reject_unknown_contract_values(tmp_path: Path) -> None:
