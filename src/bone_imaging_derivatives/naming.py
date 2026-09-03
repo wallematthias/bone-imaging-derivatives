@@ -34,6 +34,7 @@ class NamingRow:
     stack_index: int | None
     confidence: str
     problem: str
+    metadata: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -76,7 +77,9 @@ def suggested_filename(row: NamingRow | ArtifactRecord) -> str:
     if kind == "mask":
         suffix = f"mask-{role or 'unknown'}"
     elif kind == "transform":
-        suffix = "transform"
+        source_session = _transform_source_session(row) or session
+        target_session = _transform_target_session(row) or session
+        suffix = f"from-ses-{source_session}_to-ses-{target_session}_pairwise"
     elif kind == "table":
         suffix = "table"
     elif role and role not in {"image"}:
@@ -89,6 +92,7 @@ def suggested_mids_relative_path(
     *,
     subject_label: str | None = None,
     session_label: str | None = None,
+    session_label_lookup: Mapping[tuple[str, str], str] | None = None,
 ) -> Path:
     """Return the normalized Bone Imaging MIDS-style relative path for ``row``.
 
@@ -107,6 +111,22 @@ def suggested_mids_relative_path(
     if kind == "mask":
         desc = _safe_entity_label(role or "mask")
         return Path("derivatives") / "IPLContours" / f"sub-{subject}" / f"ses-{session}" / "xct" / f"{prefix}_desc-{desc}_mask{extension}"
+    if kind == "transform":
+        raw_subject = getattr(row, "subject_id", "") or ""
+        raw_source_session = _transform_source_session(row) or getattr(row, "session_id", None) or session
+        raw_target_session = _transform_target_session(row) or getattr(row, "session_id", None) or session
+        source_session = _lookup_session_label(session_label_lookup, raw_subject, raw_source_session)
+        target_session = _lookup_session_label(session_label_lookup, raw_subject, raw_target_session)
+        transform_prefix = f"sub-{subject}_ses-{source_session}_voi-{voi}{stack}"
+        return (
+            Path("derivatives")
+            / "ImportedRegistration"
+            / f"sub-{subject}"
+            / f"ses-{source_session}"
+            / "xct"
+            / "pairwise"
+            / f"{transform_prefix}_from-ses-{source_session}_to-ses-{target_session}_pairwise{extension}"
+        )
     if kind == "image" and role == "map":
         desc = _safe_entity_label(_map_description_from_name(row.path))
         return Path("derivatives") / "IPLAnalysis" / f"sub-{subject}" / f"ses-{session}" / "xct" / f"{prefix}_desc-{desc}_map{extension}"
@@ -127,6 +147,7 @@ def suggested_mids_relative_paths(rows: Sequence[NamingRow | ArtifactRecord]) ->
             row,
             subject_label=subject_label,
             session_label=session_label,
+            session_label_lookup=session_labels,
         )
     return suggestions
 
@@ -164,6 +185,7 @@ def apply_naming_row_overrides(
         stack_index=stack_index,
         confidence="user",
         problem="",
+        metadata=row.metadata,
     )
     return _row_with_recomputed_problem(updated)
 
@@ -189,7 +211,15 @@ def build_rename_plan(
     for row in eligible_rows:
         subject_label = subject_labels.get(row.subject_id or "")
         session_label = session_labels.get((row.subject_id or "", row.session_id or ""))
-        target = (root / suggested_mids_relative_path(row, subject_label=subject_label, session_label=session_label)).resolve()
+        target = (
+            root
+            / suggested_mids_relative_path(
+                row,
+                subject_label=subject_label,
+                session_label=session_label,
+                session_label_lookup=session_labels,
+            )
+        ).resolve()
         source = row.path.resolve()
         if source == target:
             continue
@@ -344,6 +374,7 @@ def _row_from_record(record: ArtifactRecord) -> NamingRow:
             stack_index=record.stack_index,
             confidence=record.identity_confidence,
             problem="",
+            metadata=record.metadata,
         )
     )
 
@@ -373,6 +404,7 @@ def _row_with_recomputed_problem(row: NamingRow) -> NamingRow:
         stack_index=row.stack_index,
         confidence=row.confidence,
         problem=problem,
+        metadata=row.metadata,
     )
 
 
@@ -570,6 +602,29 @@ def _safe_entity_label(value: str | None) -> str:
     return text or "unknown"
 
 
+def _safe_session_label(value: str | None) -> str:
+    text = re.sub(r"[^A-Za-z0-9]+", "", str(value or "").strip())
+    return text or "unknown"
+
+
+def _lookup_session_label(
+    session_label_lookup: Mapping[tuple[str, str], str] | None,
+    subject_id: str,
+    session_id: str | None,
+) -> str:
+    normalized = normalize_session_id(session_id)
+    if normalized and session_label_lookup:
+        label = session_label_lookup.get((subject_id, normalized))
+        if label:
+            return _safe_session_label(label)
+    prefixed_numeric = re.fullmatch(r"[TY](\d+)", normalized or "", re.IGNORECASE)
+    if prefixed_numeric:
+        return f"{int(prefixed_numeric.group(1)):03d}"
+    if normalized and normalized.isdigit():
+        return f"{int(normalized):03d}"
+    return _safe_session_label(normalized or session_id or "unknown")
+
+
 def _voi_label(site: str | None) -> str:
     return _safe_entity_label(normalize_site(site) or site or "unknown")
 
@@ -583,6 +638,18 @@ def _map_description_from_name(path: Path) -> str:
     if match:
         return match.group(1)
     return "map"
+
+
+def _transform_source_session(row: NamingRow | ArtifactRecord) -> str | None:
+    metadata = getattr(row, "metadata", {}) or {}
+    value = metadata.get("from_session_id") if isinstance(metadata, Mapping) else None
+    return normalize_session_id(str(value)) if value not in (None, "") else None
+
+
+def _transform_target_session(row: NamingRow | ArtifactRecord) -> str | None:
+    metadata = getattr(row, "metadata", {}) or {}
+    value = metadata.get("to_session_id") if isinstance(metadata, Mapping) else None
+    return normalize_session_id(str(value)) if value not in (None, "") else None
 
 
 def _strip_known_image_suffix(name: str) -> str:

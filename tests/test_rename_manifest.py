@@ -28,6 +28,32 @@ def test_rename_plan_writes_manifest_and_renames_files(tmp_path: Path) -> None:
     assert loaded["renames"][0]["renamed_path"] == str(target)
 
 
+def test_rename_plan_places_scanco_dat_transforms_in_imported_registration(tmp_path: Path) -> None:
+    source = tmp_path / "sub-SAMPLE341" / "site-tibia" / "ses-T1" / "SAMPLE341_T2-to-T1.DAT"
+    source.parent.mkdir(parents=True)
+    source.write_text("SCANCO TRANSFORMATION DATA VERSION:   10R4_MAT: 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1")
+
+    manifest = execute_rename_plan(build_rename_plan(tmp_path))
+
+    target = (
+        tmp_path
+        / "derivatives"
+        / "ImportedRegistration"
+        / "sub-001"
+        / "ses-002"
+        / "xct"
+        / "pairwise"
+        / "sub-001_ses-002_voi-tibia_from-ses-002_to-ses-001_pairwise.DAT"
+    )
+    assert target.exists()
+    assert not source.exists()
+
+    undo_rename_manifest(manifest)
+
+    assert source.exists()
+    assert not target.exists()
+
+
 def test_undo_rename_manifest_restores_original_names(tmp_path: Path) -> None:
     source = tmp_path / "SUBJ001_RL_T1_TRAB_MASK.AIM"
     source.touch()

@@ -144,6 +144,41 @@ def test_discover_artifacts_supports_mids_style_xct_and_ipl_derivatives(tmp_path
     assert map_record.path == analysis
 
 
+def test_discover_artifacts_supports_scanco_dat_pairwise_transforms(tmp_path: Path) -> None:
+    root = tmp_path / "dataset"
+    dat = root / "sub-SAMPLE341" / "site-tibia" / "ses-T1" / "SAMPLE341_T2-to-T1.DAT"
+    dat.parent.mkdir(parents=True)
+    dat.write_text("SCANCO TRANSFORMATION DATA VERSION:   10R4_MAT: 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1")
+
+    transforms = discover_artifacts(root).find(kind="transform", subject_id="SAMPLE341", site="tibia")
+
+    assert len(transforms) == 1
+    assert transforms[0].path == dat
+    assert transforms[0].session_id == "T1"
+    assert transforms[0].metadata["from_session_id"] == "T2"
+    assert transforms[0].metadata["to_session_id"] == "T1"
+
+
+def test_discover_artifacts_ignores_unreadable_sidecars(tmp_path: Path, monkeypatch) -> None:
+    image = tmp_path / "sub-001" / "ses-001" / "xct" / "sub-001_ses-001_voi-radiusleft_xct.AIM"
+    image.parent.mkdir(parents=True)
+    image.write_bytes(b"")
+
+    original_exists = Path.exists
+
+    def flaky_exists(path: Path) -> bool:
+        if path.name.endswith(".AIM.json"):
+            raise FileNotFoundError(path)
+        return original_exists(path)
+
+    monkeypatch.setattr(Path, "exists", flaky_exists)
+
+    records = discover_artifacts(tmp_path).records
+
+    assert len(records) == 1
+    assert records[0].path == image
+
+
 def test_discover_artifacts_prefers_ipl_contours_before_bone_contours(tmp_path: Path) -> None:
     root = tmp_path / "dataset"
     raw = root / "sub-001" / "ses-001" / "xct" / "sub-001_ses-001_voi-radiusleft_xct.AIM"

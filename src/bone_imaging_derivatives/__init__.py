@@ -45,6 +45,7 @@ from .profile_registry import (
     tool_profile_dir,
 )
 from .records import DerivativeRecord
+from .families import IMPORTED_REGISTRATION, IPL_CONTOURS
 from .artifacts import (
     ArtifactIndex,
     ArtifactRecord,
@@ -66,6 +67,8 @@ __all__ = [
     "DerivativeManifest",
     "DerivativeProgressEvent",
     "DerivativeRecord",
+    "IMPORTED_REGISTRATION",
+    "IPL_CONTOURS",
     "PrerequisiteResult",
     "ProfileRecord",
     "NamingRow",

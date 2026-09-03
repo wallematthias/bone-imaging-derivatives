@@ -27,6 +27,9 @@ _TRANSFORM_RE = re.compile(
     r"from[-_]?ses[-_]?([A-Za-z0-9][A-Za-z0-9._-]*)[_-]to[-_]?ses[-_]?([A-Za-z0-9][A-Za-z0-9._-]*)",
     re.IGNORECASE,
 )
+_DASH_TO_TRANSFORM_RE = re.compile(
+    r"(?i)(?:^|[_-])([A-Z0-9]+)-to-([A-Z0-9]+)(?:[_-]pairwise)?$",
+)
 _STACK_RE = re.compile(r"(?:^|[_-])STACK[_-]?0*([1-9]\d*)(?=[_-]|$)", re.IGNORECASE)
 
 _SITE_ALIASES = {
@@ -325,7 +328,7 @@ def _iter_candidate_files(root: Path) -> Iterable[Path]:
     for path in root.rglob("*"):
         if path.is_dir() or _is_sidecar(path):
             continue
-        if _file_format(path) is not None or path.suffix.lower() in {".tfm", ".h5", ".csv"}:
+        if _file_format(path) is not None or path.suffix.lower() in {".tfm", ".h5", ".dat", ".csv"}:
             candidates.append(path)
     return candidates
 
@@ -351,6 +354,11 @@ def _record_from_path(dataset_root: Path, path: Path) -> ArtifactRecord | None:
         if pair:
             metadata["from_session_id"] = normalize_session_id(pair.group(1))
             metadata["to_session_id"] = normalize_session_id(pair.group(2))
+        else:
+            dash_pair = _DASH_TO_TRANSFORM_RE.search(_strip_known_image_suffix(path.name))
+            if dash_pair:
+                metadata["from_session_id"] = normalize_session_id(dash_pair.group(1))
+                metadata["to_session_id"] = normalize_session_id(dash_pair.group(2))
     return ArtifactRecord(
         path=path,
         kind=kind,
@@ -401,19 +409,20 @@ def _read_sidecar(path: Path) -> dict[str, Any]:
     else:
         candidates.append(path.with_suffix(".json"))
     for candidate in candidates:
-        if candidate.exists():
-            try:
-                data = json.loads(candidate.read_text())
-            except (OSError, json.JSONDecodeError):
-                return {}
-            return data if isinstance(data, dict) else {}
+        try:
+            if not candidate.exists():
+                continue
+            data = json.loads(candidate.read_text())
+        except (OSError, json.JSONDecodeError):
+            return {}
+        return data if isinstance(data, dict) else {}
     return {}
 
 
 def _kind_from_path(path: Path, fmt: str | None) -> str | None:
     lower_parts = {part.lower() for part in path.parts}
     lower_name = path.name.lower()
-    if path.suffix.lower() in {".tfm", ".h5"}:
+    if path.suffix.lower() in {".tfm", ".h5", ".dat"}:
         return "transform"
     if path.suffix.lower() == ".csv":
         return "table"

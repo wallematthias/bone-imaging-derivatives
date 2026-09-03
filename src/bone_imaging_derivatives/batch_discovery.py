@@ -21,6 +21,12 @@ _MASK_NAME = re.compile(
     rf"(?:_stack-(?P<stack>\d+))?_desc-(?P<role>[A-Za-z0-9._-]+)_mask{_IMAGE_SUFFIX}$",
     re.IGNORECASE,
 )
+_TRANSFORM_NAME = re.compile(
+    r"^sub-(?P<subject>[A-Za-z0-9.]+)_ses-(?P<session>[A-Za-z0-9.]+)_voi-(?P<voi>[A-Za-z0-9]+)"
+    r"(?:_stack-(?P<stack>\d+))?_from-ses-(?P<moving>[A-Za-z0-9.]+)_to-ses-(?P<fixed>[A-Za-z0-9.]+)"
+    r"_(?P<kind>pairwise|baseline)\.(?:tfm|h5|dat)$",
+    re.IGNORECASE,
+)
 _ROLE_ALIASES = {
     "seg": "segmentation",
     "segmentation": "segmentation",
@@ -35,7 +41,7 @@ _ROLE_ALIASES = {
     "cortical": "cort",
     "cortical_mask": "cort",
 }
-_CONTOUR_FAMILY_PRIORITY = {"ImportedContours": 0, "BoneContours": 1}
+_CONTOUR_FAMILY_PRIORITY = {"IPLContours": 0, "ImportedContours": 0, "BoneContours": 1}
 
 
 @dataclass(frozen=True, order=True)
@@ -138,6 +144,12 @@ def discover_derivative_artifacts(dataset_root: str | Path, derivative_family: s
         artifact = _artifact_from_filename(path, root, derivative_family, _MASK_NAME, None)
         if artifact is not None:
             found.setdefault(artifact.path.resolve(), artifact)
+    for path in sorted(family_root.glob("sub-*/ses-*/xct/*/*")):
+        if not path.is_file():
+            continue
+        artifact = _artifact_from_transform_filename(path, root, derivative_family)
+        if artifact is not None:
+            found.setdefault(artifact.path.resolve(), artifact)
     return tuple(sorted(found.values(), key=lambda artifact: str(artifact.path)))
 
 
@@ -211,6 +223,30 @@ def _artifact_from_filename(
     key = CaseKey(match.group("subject"), match.group("session"), _normalize_voi(match.group("voi")), _stack(match.group("stack")))
     role = _normalize_role(match.groupdict().get("role") or default_role or "image")
     return BatchArtifact(path, key, role, derivative)
+
+
+def _artifact_from_transform_filename(path: Path, root: Path, derivative: str) -> BatchArtifact | None:
+    match = _TRANSFORM_NAME.match(path.name)
+    if match is None:
+        return None
+    relative = path.relative_to(root)
+    expected = (f"sub-{match.group('subject')}", f"ses-{match.group('session')}", "xct")
+    if tuple(relative.parts[2:5]) != expected:
+        return None
+    kind = match.group("kind").lower()
+    role = "transform_pairwise" if kind == "pairwise" else "transform_to_reference"
+    metadata = {
+        "from_session_id": match.group("moving"),
+        "to_session_id": match.group("fixed"),
+    }
+    return BatchArtifact(
+        path,
+        CaseKey(match.group("subject"), match.group("session"), _normalize_voi(match.group("voi")), _stack(match.group("stack"))),
+        role,
+        derivative,
+        "file",
+        metadata,
+    )
 
 
 def _artifact_from_manifest(

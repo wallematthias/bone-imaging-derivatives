@@ -42,6 +42,25 @@ def test_normalized_strambo_dataset_discovers_imported_contours(tmp_path: Path) 
     assert all(artifact.derivative == "ImportedContours" for artifact in selected.values())
 
 
+def test_normalized_dataset_discovers_ipl_contours_as_curated_masks(tmp_path: Path) -> None:
+    """Imported scanner/IPL masks are first-class contour inputs for batch tools."""
+    root = tmp_path / "dataset"
+    raw = root / "sub-001" / "ses-001" / "xct" / "sub-001_ses-001_voi-tibialeft_xct.AIM"
+    ipl = root / "derivatives" / "IPLContours" / "sub-001" / "ses-001" / "xct"
+    raw.parent.mkdir(parents=True)
+    ipl.mkdir(parents=True)
+    raw.touch()
+    for role in ("full", "cort"):
+        (ipl / f"sub-001_ses-001_voi-tibialeft_desc-{role}_mask.AIM").touch()
+
+    images = discover_raw_xct_images(root)
+    contours = discover_derivative_artifacts(root, "IPLContours")
+    selected = preferred_contours(contours, images[0].key)
+
+    assert set(selected) == {"full", "cort"}
+    assert all(artifact.derivative == "IPLContours" for artifact in selected.values())
+
+
 def test_normalized_discovery_keeps_radius_sides_as_distinct_keys(tmp_path: Path) -> None:
     """Collapsing sides would merge unrelated acquisition rows."""
     root = tmp_path / "dataset"
@@ -73,6 +92,46 @@ def test_preferred_contours_choose_imported_masks_before_generated_masks(tmp_pat
     selected = preferred_contours(artifacts, CaseKey("001", "001", "radiusleft"))
 
     assert selected["full"].derivative == "ImportedContours"
+
+
+def test_preferred_contours_choose_ipl_masks_before_generated_masks(tmp_path: Path) -> None:
+    """IPL/scanner contours should be preferred over generated BoneContours."""
+    root = tmp_path / "dataset"
+    for family in ("IPLContours", "BoneContours"):
+        path = root / "derivatives" / family / "sub-001" / "ses-001" / "xct" / "sub-001_ses-001_voi-radiusleft_desc-full_mask.AIM"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
+
+    artifacts = (
+        *discover_derivative_artifacts(root, "BoneContours"),
+        *discover_derivative_artifacts(root, "IPLContours"),
+    )
+    selected = preferred_contours(artifacts, CaseKey("001", "001", "radiusleft"))
+
+    assert selected["full"].derivative == "IPLContours"
+
+
+def test_imported_registration_is_a_first_class_derivative_family(tmp_path: Path) -> None:
+    """Imported DAT/TFM registrations should be discoverable separately from generated registration."""
+    root = tmp_path / "dataset"
+    transform = (
+        root
+        / "derivatives"
+        / "ImportedRegistration"
+        / "sub-001"
+        / "ses-002"
+        / "xct"
+        / "pairwise"
+        / "sub-001_ses-002_voi-radiusleft_from-ses-002_to-ses-001_pairwise.tfm"
+    )
+    transform.parent.mkdir(parents=True)
+    transform.touch()
+
+    artifacts = discover_derivative_artifacts(root, "ImportedRegistration")
+
+    assert [(item.key, item.role, item.derivative) for item in artifacts] == [
+        (CaseKey("001", "002", "radiusleft"), "transform_pairwise", "ImportedRegistration")
+    ]
 
 
 def test_stack_aware_prerequisite_statuses_cover_ready_loadable_and_review(tmp_path: Path) -> None:
