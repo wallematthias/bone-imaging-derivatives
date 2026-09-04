@@ -160,6 +160,12 @@ def test_stack_aware_prerequisite_statuses_cover_ready_loadable_and_review(tmp_p
         key,
     )
     assert prerequisite_status(image, duplicate, required_roles=("full",)).status == "review"
+    assert prerequisite_status(
+        image,
+        duplicate,
+        required_roles=("full",),
+        existing_outputs=(BatchArtifact(tmp_path / "table.csv", key, "table", "BoneContours"),),
+    ).status == "loadable"
 
 
 def test_unstacked_and_stack_one_keys_are_not_equivalent_for_matching(tmp_path: Path) -> None:

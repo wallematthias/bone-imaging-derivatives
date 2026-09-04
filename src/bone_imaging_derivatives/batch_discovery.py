@@ -179,12 +179,12 @@ def prerequisite_status(
     """Classify a batch row as ready, loadable, missing, or needing review."""
     required = tuple(_normalize_role(role) for role in required_roles)
     missing = tuple(role for role in required if role not in contours)
+    if any(case_keys_match(output.key, image.key) for output in existing_outputs):
+        return PrerequisiteResult("loadable")
     if image.metadata.get("review_reason") or contours.review_roles:
         return PrerequisiteResult("review", missing, contours.review_roles)
     if missing:
         return PrerequisiteResult("missing", missing)
-    if any(case_keys_match(output.key, image.key) for output in existing_outputs):
-        return PrerequisiteResult("loadable")
     return PrerequisiteResult("ready")
 
 
