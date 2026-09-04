@@ -111,6 +111,28 @@ def test_preferred_contours_choose_ipl_masks_before_generated_masks(tmp_path: Pa
     assert selected["full"].derivative == "IPLContours"
 
 
+def test_discover_derivative_artifacts_includes_file_only_material_labelmaps(tmp_path: Path) -> None:
+    """Generated FEA material labels must be discoverable even when no manifest is present."""
+    root = tmp_path / "dataset"
+    label = (
+        root
+        / "derivatives"
+        / "BoneContours"
+        / "sub-001"
+        / "ses-001"
+        / "xct"
+        / "sub-001_ses-001_voi-radiusleft_desc-fea-materials_label.AIM"
+    )
+    label.parent.mkdir(parents=True)
+    label.touch()
+
+    artifacts = discover_derivative_artifacts(root, "BoneContours")
+
+    assert [(item.key, item.role, item.derivative) for item in artifacts] == [
+        (CaseKey("001", "001", "radiusleft"), "material_labelmap", "BoneContours")
+    ]
+
+
 def test_imported_registration_is_a_first_class_derivative_family(tmp_path: Path) -> None:
     """Imported DAT/TFM registrations should be discoverable separately from generated registration."""
     root = tmp_path / "dataset"

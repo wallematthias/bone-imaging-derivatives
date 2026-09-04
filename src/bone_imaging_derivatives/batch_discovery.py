@@ -16,9 +16,9 @@ _RAW_NAME = re.compile(
     rf"(?:_stack-(?P<stack>\d+))?_xct{_IMAGE_SUFFIX}$",
     re.IGNORECASE,
 )
-_MASK_NAME = re.compile(
+_DERIVATIVE_IMAGE_NAME = re.compile(
     rf"^sub-(?P<subject>[A-Za-z0-9.]+)_ses-(?P<session>[A-Za-z0-9.]+)_voi-(?P<voi>[A-Za-z0-9]+)"
-    rf"(?:_stack-(?P<stack>\d+))?_desc-(?P<role>[A-Za-z0-9._-]+)_mask{_IMAGE_SUFFIX}$",
+    rf"(?:_stack-(?P<stack>\d+))?_desc-(?P<role>[A-Za-z0-9._-]+)_(?:mask|label|map){_IMAGE_SUFFIX}$",
     re.IGNORECASE,
 )
 _TRANSFORM_NAME = re.compile(
@@ -40,6 +40,13 @@ _ROLE_ALIASES = {
     "cort": "cort",
     "cortical": "cort",
     "cortical_mask": "cort",
+    "fea_materials": "material_labelmap",
+    "material": "material_labelmap",
+    "material_label": "material_labelmap",
+    "material_labelmap": "material_labelmap",
+    "hom_ls": "material_labelmap",
+    "model_label": "material_labelmap",
+    "model_labelmap": "material_labelmap",
 }
 _CONTOUR_FAMILY_PRIORITY = {"IPLContours": 0, "ImportedContours": 0, "BoneContours": 1}
 
@@ -141,7 +148,7 @@ def discover_derivative_artifacts(dataset_root: str | Path, derivative_family: s
     for path in sorted(family_root.glob("sub-*/ses-*/xct/*")):
         if not path.is_file():
             continue
-        artifact = _artifact_from_filename(path, root, derivative_family, _MASK_NAME, None)
+        artifact = _artifact_from_filename(path, root, derivative_family, _DERIVATIVE_IMAGE_NAME, None)
         if artifact is not None:
             found.setdefault(artifact.path.resolve(), artifact)
     for path in sorted(family_root.glob("sub-*/ses-*/xct/*/*")):
