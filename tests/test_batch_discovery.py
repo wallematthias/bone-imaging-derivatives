@@ -355,3 +355,21 @@ def test_derivative_discovery_keeps_non_contour_manifest_roles(tmp_path: Path) -
     artifacts = discover_derivative_artifacts(root, "Microarchitecture")
 
     assert [(item.role, item.derivative) for item in artifacts] == [("measurements_table", "Microarchitecture")]
+
+
+def test_discover_derivative_artifacts_includes_profile_maps_and_tables_without_manifest(tmp_path: Path) -> None:
+    """Canonical FEA outputs should be discoverable from files alone."""
+    root = tmp_path / "dataset"
+    out_dir = root / "derivatives" / "FEA" / "sub-001" / "ses-001" / "xct"
+    map_path = out_dir / "maps" / "sub-001_ses-001_voi-radiusleft_desc-XtremeCTI_map-sed.nii.gz"
+    table_path = out_dir / "measurements" / "sub-001_ses-001_voi-radiusleft_desc-XtremeCTI_fea.csv"
+    map_path.parent.mkdir(parents=True)
+    table_path.parent.mkdir(parents=True)
+    map_path.write_bytes(b"map")
+    table_path.write_text("Sample,Profile\n", encoding="utf-8")
+
+    artifacts = discover_derivative_artifacts(root, "FEA")
+
+    by_role = {artifact.role: artifact for artifact in artifacts}
+    assert by_role["sed_map"].key == CaseKey("001", "001", "radiusleft", None)
+    assert by_role["summary_table"].metadata["profile"] == "XtremeCTI"

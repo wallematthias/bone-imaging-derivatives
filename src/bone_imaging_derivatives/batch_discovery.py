@@ -21,6 +21,16 @@ _DERIVATIVE_IMAGE_NAME = re.compile(
     rf"(?:_stack-(?P<stack>\d+))?_desc-(?P<role>[A-Za-z0-9._-]+)_(?:mask|label|map){_IMAGE_SUFFIX}$",
     re.IGNORECASE,
 )
+_DERIVATIVE_PROFILE_MAP_NAME = re.compile(
+    rf"^sub-(?P<subject>[A-Za-z0-9.]+)_ses-(?P<session>[A-Za-z0-9.]+)_voi-(?P<voi>[A-Za-z0-9]+)"
+    rf"(?:_stack-(?P<stack>\d+))?_desc-(?P<profile>[A-Za-z0-9._-]+)_map-(?P<map>[A-Za-z0-9._-]+){_IMAGE_SUFFIX}$",
+    re.IGNORECASE,
+)
+_DERIVATIVE_PROFILE_TABLE_NAME = re.compile(
+    r"^sub-(?P<subject>[A-Za-z0-9.]+)_ses-(?P<session>[A-Za-z0-9.]+)_voi-(?P<voi>[A-Za-z0-9]+)"
+    r"(?:_stack-(?P<stack>\d+))?_desc-(?P<profile>[A-Za-z0-9._-]+)_(?P<table>fea|measurements|summary)\.csv$",
+    re.IGNORECASE,
+)
 _TRANSFORM_NAME = re.compile(
     r"^sub-(?P<subject>[A-Za-z0-9.]+)_ses-(?P<session>[A-Za-z0-9.]+)_voi-(?P<voi>[A-Za-z0-9]+)"
     r"(?:_stack-(?P<stack>\d+))?_from-ses-(?P<moving>[A-Za-z0-9.]+)_to-ses-(?P<fixed>[A-Za-z0-9.]+)"
@@ -155,6 +165,8 @@ def discover_derivative_artifacts(dataset_root: str | Path, derivative_family: s
         if not path.is_file():
             continue
         artifact = _artifact_from_transform_filename(path, root, derivative_family)
+        if artifact is None:
+            artifact = _artifact_from_profile_output_filename(path, root, derivative_family)
         if artifact is not None:
             found.setdefault(artifact.path.resolve(), artifact)
     return tuple(sorted(found.values(), key=lambda artifact: str(artifact.path)))
@@ -246,6 +258,33 @@ def _artifact_from_transform_filename(path: Path, root: Path, derivative: str) -
         "from_session_id": match.group("moving"),
         "to_session_id": match.group("fixed"),
     }
+    return BatchArtifact(
+        path,
+        CaseKey(match.group("subject"), match.group("session"), _normalize_voi(match.group("voi")), _stack(match.group("stack"))),
+        role,
+        derivative,
+        "file",
+        metadata,
+    )
+
+
+def _artifact_from_profile_output_filename(path: Path, root: Path, derivative: str) -> BatchArtifact | None:
+    match = _DERIVATIVE_PROFILE_MAP_NAME.match(path.name)
+    kind = "map"
+    if match is None:
+        match = _DERIVATIVE_PROFILE_TABLE_NAME.match(path.name)
+        kind = "table"
+    if match is None:
+        return None
+    relative = path.relative_to(root)
+    expected = (f"sub-{match.group('subject')}", f"ses-{match.group('session')}", "xct")
+    if tuple(relative.parts[2:5]) != expected:
+        return None
+    metadata = {"profile": match.group("profile")}
+    if kind == "map":
+        role = f"{_normalize_role(match.group('map'))}_map"
+    else:
+        role = "summary_table" if match.group("table").lower() in {"fea", "summary"} else "measurements_table"
     return BatchArtifact(
         path,
         CaseKey(match.group("subject"), match.group("session"), _normalize_voi(match.group("voi")), _stack(match.group("stack"))),
