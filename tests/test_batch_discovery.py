@@ -121,7 +121,7 @@ def test_discover_derivative_artifacts_includes_file_only_material_labelmaps(tmp
         / "sub-001"
         / "ses-001"
         / "xct"
-        / "sub-001_ses-001_voi-radiusleft_desc-fea-materials_label.AIM"
+        / "sub-001_ses-001_voi-radiusleft_desc-fea-input_label.AIM"
     )
     label.parent.mkdir(parents=True)
     label.touch()

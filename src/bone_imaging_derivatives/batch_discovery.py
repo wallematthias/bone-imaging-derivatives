@@ -50,6 +50,8 @@ _ROLE_ALIASES = {
     "cort": "cort",
     "cortical": "cort",
     "cortical_mask": "cort",
+    "fea_input": "material_labelmap",
+    "fea-input": "material_labelmap",
     "fea_materials": "material_labelmap",
     "material": "material_labelmap",
     "material_label": "material_labelmap",
