@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import re
+from uuid import uuid4
 from typing import Callable, Mapping, Any, Sequence
 
 from .artifacts import (
@@ -281,29 +282,35 @@ def read_rename_manifest(path: str | Path) -> dict[str, Any]:
 
 
 def undo_rename_manifest(path: str | Path) -> int:
-    """Undo renames recorded in a manifest, returning the number of files restored."""
+    """Restore original paths and archive the completed manifest for another rename."""
     manifest = read_rename_manifest(path)
     renames = manifest.get("renames", [])
     dataset_root = Path(manifest.get("dataset_root") or Path(path).parent).resolve()
     restored = 0
     cleanup_dirs: list[Path] = []
+    # Validate the complete restore before moving anything, including sidecars.
+    for item in renames:
+        source = Path(item["original_path"])
+        target = Path(item["renamed_path"])
+        if target.exists() and source.exists():
+            raise FileExistsError(f"Cannot restore {source}; path already exists")
+        if not target.exists() and not source.exists():
+            raise FileNotFoundError(f"Cannot restore missing rename target: {target}")
     for item in reversed(renames):
         source = Path(item["original_path"])
         target = Path(item["renamed_path"])
         cleanup_dirs.append(target.parent)
-        if _is_sidecar_file(source) or _is_sidecar_file(target):
-            if target.exists():
-                target.unlink()
-            if source.exists():
-                source.unlink()
-            continue
         if not target.exists():
             continue
         if source.exists():
             raise FileExistsError(f"Cannot restore {source}; path already exists")
         target.rename(source)
-        restored += 1
+        if not _is_sidecar_file(source):
+            restored += 1
     _prune_empty_dirs(cleanup_dirs, stop_at=dataset_root)
+    manifest_path = Path(path)
+    archive = manifest_path.with_name(f"{manifest_path.stem}.undone-{uuid4().hex}{manifest_path.suffix}")
+    manifest_path.rename(archive)
     return restored
 
 
@@ -423,13 +430,14 @@ def _enrich_record_from_metadata(
     record: ArtifactRecord,
     metadata_reader: Callable[[Path], Mapping[str, Any] | None],
 ) -> ArtifactRecord:
-    if record.subject_id and record.session_id and record.site:
+    scanco_scan_id = record.subject_source == "filename" and re.fullmatch(r"D\d+", record.subject_id or "", re.IGNORECASE)
+    if record.subject_id and record.session_id and record.site and not scanco_scan_id:
         return record
     try:
         metadata = metadata_reader(record.path) or {}
     except Exception:
         return record
-    processing_log = metadata.get("processing_log")
+    processing_log = metadata.get("processing_log_raw") or metadata.get("processing_log")
     if isinstance(processing_log, str):
         processing_log = _parse_processing_log(processing_log)
     if not isinstance(processing_log, Mapping):
@@ -439,7 +447,8 @@ def _enrich_record_from_metadata(
     if not isinstance(processing_log, Mapping):
         processing_log = metadata
 
-    subject_id = record.subject_id or normalize_subject_id(_first_metadata_value(processing_log, "Index Patient", "Patient", "subject_id"))
+    header_subject = normalize_subject_id(_first_metadata_value(processing_log, "Index Patient", "Patient", "subject_id"))
+    subject_id = (header_subject or record.subject_id) if scanco_scan_id else (record.subject_id or header_subject)
     session_id = record.session_id or normalize_session_id(
         _first_metadata_value(processing_log, "Index Measurement", "Measurement", "session_id")
     )

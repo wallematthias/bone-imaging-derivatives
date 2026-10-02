@@ -68,6 +68,34 @@ def test_undo_rename_manifest_restores_original_names(tmp_path: Path) -> None:
     assert not (tmp_path / "derivatives").exists()
 
 
+def test_rename_undo_rename_preserves_payload_and_archives_manifest(tmp_path):
+    source = tmp_path / "SUBJ001_RL_T1.AIM"
+    source.write_bytes(b"unchanged AIM bytes")
+    manifest = execute_rename_plan(build_rename_plan(tmp_path))
+    original_manifest = read_rename_manifest(manifest)
+    undo_rename_manifest(manifest)
+    assert source.read_bytes() == b"unchanged AIM bytes"
+    assert not manifest.exists()
+    archives = list(tmp_path.glob("dataset_rename_manifest.undone-*.json"))
+    assert len(archives) == 1
+    assert read_rename_manifest(archives[0])["renames"] == original_manifest["renames"]
+    execute_rename_plan(build_rename_plan(tmp_path))
+    assert manifest.exists()
+
+
+def test_undo_collision_is_preflighted_without_partial_restore(tmp_path):
+    sources = [tmp_path / f"SUBJ001_RL_T{i}.AIM" for i in (1, 2)]
+    for source in sources:
+        source.write_bytes(b"original")
+    manifest = execute_rename_plan(build_rename_plan(tmp_path))
+    sources[0].write_bytes(b"unrelated new file")
+    with pytest.raises(FileExistsError):
+        undo_rename_manifest(manifest)
+    assert not sources[1].exists()
+    assert sources[0].read_bytes() == b"unrelated new file"
+    assert manifest.exists()
+
+
 def test_rename_plan_rejects_collisions_before_moving_files(tmp_path: Path) -> None:
     source = tmp_path / "SUBJ001_RL_T1_TRAB_MASK.AIM"
     target = tmp_path / "derivatives" / "IPLContours" / "sub-001" / "ses-001" / "xct" / "sub-001_ses-001_voi-radiusleft_desc-trab_mask.AIM"
@@ -110,7 +138,7 @@ def test_rename_plan_includes_sidecars_when_present(tmp_path: Path) -> None:
     undo_rename_manifest(manifest)
 
     assert source.exists()
-    assert not sidecar.exists()
+    assert sidecar.read_text(encoding="utf-8") == '{"site": "radius_left"}'
     assert not target_sidecar.exists()
     assert not (tmp_path / "sub-001").exists()
 
@@ -137,7 +165,7 @@ def test_rename_plan_drops_scanco_aim_version_suffix_from_targets(tmp_path: Path
     undo_rename_manifest(manifest)
 
     assert source.exists()
-    assert not sidecar.exists()
+    assert sidecar.read_text(encoding="utf-8") == '{"site": "radius_left"}'
     assert not target_sidecar.exists()
     assert not (tmp_path / "sub-001").exists()
 

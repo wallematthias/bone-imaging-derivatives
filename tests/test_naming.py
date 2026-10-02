@@ -1,4 +1,5 @@
 from pathlib import Path
+import pytest
 
 from bone_imaging_derivatives.naming import (
     apply_naming_row_overrides,
@@ -7,6 +8,30 @@ from bone_imaging_derivatives.naming import (
     suggested_filename,
     suggested_mids_relative_paths,
 )
+
+
+@pytest.mark.parametrize("log_key", ["processing_log", "processing_log_raw"])
+def test_scanco_scan_ids_use_patient_header_not_scan_number(tmp_path, log_key):
+    for name in ("D0000308.AIM", "D0000309.AIM", "D0000308_CORT_MASK.AIM"):
+        (tmp_path / name).touch()
+
+    def reader(path):
+        measurement = "309" if path.name.startswith("D0000309") else "308"
+        return {log_key: f"Index Patient 433\nIndex Measurement {measurement}\nSite 20\n"}
+
+    rows = build_naming_rows(tmp_path, metadata_reader=reader)
+    assert {row.subject_id for row in rows} == {"433"}
+    assert {row.session_id for row in rows} == {"308", "309"}
+    assert {row.site for row in rows} == {"radiusleft"}
+
+
+def test_explicit_anonymized_identity_wins_over_scanco_header(tmp_path):
+    path = tmp_path / "sub-001_ses-002_voi-radiusleft_xct.AIM"
+    path.touch()
+    rows = build_naming_rows(tmp_path, metadata_reader=lambda _: {
+        "processing_log": "Index Patient 433\nIndex Measurement 308\nSite 20\n"})
+    assert rows[0].subject_id == "001"
+    assert rows[0].session_id == "002"
 
 
 def test_naming_rows_flag_missing_identity_and_preserve_side_specific_sites(tmp_path: Path) -> None:
