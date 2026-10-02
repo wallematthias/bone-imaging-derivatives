@@ -3,7 +3,9 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
+import tempfile
 from typing import Any, Mapping
 
 from .families import validate_derivative_family
@@ -71,7 +73,19 @@ def write_manifest(manifest: DerivativeManifest, path: Path) -> None:
         "records": [_record_payload(record, root) for record in manifest.records],
     }
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", prefix=".manifest-",
+                                         suffix=".json", dir=path.parent, delete=False) as stream:
+            temporary = Path(stream.name)
+            json.dump(payload, stream, indent=2, sort_keys=True)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def _manifest_is_within_dataset(path: Path, dataset_root: Path) -> bool:

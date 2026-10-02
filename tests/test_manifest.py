@@ -1,7 +1,23 @@
 from pathlib import Path
 import shutil
+import pytest
 
 from bone_imaging_derivatives import DerivativeManifest, DerivativeRecord, read_manifest, write_manifest
+
+
+def test_failed_manifest_replace_preserves_previous_manifest(tmp_path, monkeypatch):
+    import bone_imaging_derivatives.manifest as module
+    path = tmp_path / "manifest.json"
+    original = DerivativeManifest.create("BoneContours", tmp_path, {"name": "test", "version": "1"})
+    write_manifest(original, path)
+    before = path.read_bytes()
+    def fail_replace(*args):
+        raise OSError("disk failure")
+    monkeypatch.setattr(module.os, "replace", fail_replace)
+    with pytest.raises(OSError, match="disk failure"):
+        write_manifest(DerivativeManifest.create("BoneContours", tmp_path, {"name": "test", "version": "2"}), path)
+    assert path.read_bytes() == before
+    assert list(tmp_path.iterdir()) == [path]
 
 
 def test_manifest_round_trip_stores_dataset_relative_paths(tmp_path: Path) -> None:

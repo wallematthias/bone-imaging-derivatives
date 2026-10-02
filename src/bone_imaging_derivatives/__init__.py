@@ -18,6 +18,7 @@ from .batch_discovery import (
 from .discovery import discover_manifests, find_records
 from .layout import derivative_family_root, manifest_path, record_output_path, voi_token
 from .manifest import DerivativeManifest, read_manifest, write_manifest
+from .unet_completion import completed_unet_masks
 from .naming import (
     NamingRow,
     RenamePlan,
@@ -59,6 +60,7 @@ from .artifacts import (
 )
 
 __all__ = [
+    "completed_unet_masks",
     "ArtifactIndex",
     "ArtifactRecord",
     "BatchArtifact",

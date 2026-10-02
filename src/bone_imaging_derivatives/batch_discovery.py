@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 
 from .manifest import read_manifest
+from .unet_completion import unet_artifact_ready
 
 _IMAGE_SUFFIX = r"(?:\.aim(?:;\d+)?|\.isq|\.scv|\.mha|\.mhd|\.nii(?:\.gz)?|\.nrrd|\.nhdr)"
 _RAW_NAME = re.compile(
@@ -152,6 +153,11 @@ def discover_derivative_artifacts(dataset_root: str | Path, derivative_family: s
         if manifest.derivative_family != derivative_family:
             raise ValueError(f"Manifest family does not match directory: {manifest_path}")
         for record in manifest.records:
+            if derivative_family == "BoneContours" and not unet_artifact_ready(
+                record.path, unet_hint=record.metadata.get("method") == "unet"
+                or (record.software or {}).get("name") == "hrpqct-segmentation"
+            ):
+                continue
             artifact = _artifact_from_manifest(record.path, record.subject_id, record.session_id, record.site,
                                                record.stack_index, record.role, derivative_family, record.source,
                                                family_root, metadata=record.metadata)
@@ -161,7 +167,7 @@ def discover_derivative_artifacts(dataset_root: str | Path, derivative_family: s
         if not path.is_file():
             continue
         artifact = _artifact_from_filename(path, root, derivative_family, _DERIVATIVE_IMAGE_NAME, None)
-        if artifact is not None:
+        if artifact is not None and (derivative_family != "BoneContours" or unet_artifact_ready(path)):
             found.setdefault(artifact.path.resolve(), artifact)
     for path in sorted(family_root.glob("sub-*/ses-*/xct/*/*")):
         if not path.is_file():
